@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokemon Translator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header>
+        <h1>Pokemon Translator</h1>
+        <p>Enter text and get a version made of Pokemon names that rhyme with your phrase.</p>
+      </header>
+
+      <main>
+        <form id="translateForm">
+          <label for="inputText">Type a phrase</label>
+          <textarea id="inputText" rows="5" placeholder="Example: I want to battle"></textarea>
+          <button type="submit">Translate</button>
+        </form>
+
+        <section class="result-panel">
+          <h2>Translated phrase</h2>
+          <div id="message" class="message"></div>
+          <pre id="result" class="result" aria-live="polite"></pre>
+        </section>
+      </main>
+
+      <footer>
+        <p>Built for Windows with Electron.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

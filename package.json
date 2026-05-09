@@ -1,0 +1,34 @@
+{
+  "name": "pokemon-translator",
+  "productName": "Pokemon Translator",
+  "version": "0.1.0",
+  "description": "A Windows desktop app that translates text into rhyming Pokemon names.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "package": "npm run dist"
+  },
+  "build": {
+    "appId": "com.pokemon.translator",
+    "productName": "Pokemon Translator",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "perMachine": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0"
+  }
+}
