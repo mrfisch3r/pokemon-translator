@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const result = document.getElementById('result');
   const backgroundMusic = document.getElementById('backgroundMusic');
   const escapeSprite = document.getElementById('escapeSprite');
+  const localeWarning = document.getElementById('localeWarning');
 
   const SPRITE_WIDTH = 72;
   const SPRITE_HEIGHT = 75;
@@ -14,6 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const MUSIC_INITIAL_VOLUME = 0.35;
   const MUSIC_VOLUME_STEP = 0.08;
   const MUSIC_MAX_VOLUME = 1;
+  const LOCALE_WARNING_DURATION = 4200;
+  const EXIT_BUTTON_FLEE_DISTANCE = 190;
+  const EXIT_BUTTON_SPEED = 430;
   const ESCAPE_START_X = 24;
   const ESCAPE_START_Y = 120;
   const KEY_DIRECTIONS = {
@@ -34,15 +38,116 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const DIRECTION_PRIORITY = ['down', 'up', 'right', 'left'];
   const movementKeys = new Set();
+  let visibleAreas = [];
   let escapeQuestActive = false;
+  let localeWarningActive = false;
   let animationFrameId = null;
   let lastMoveTime = 0;
   let facingDirection = 'down';
   let walkAnimationStartedAt = 0;
   let wasMoving = false;
+  let warningAudioContext = null;
+  let warningNoiseTimer = null;
+  let exitButtonPosition = null;
   let spritePosition = {
     x: ESCAPE_START_X,
     y: ESCAPE_START_Y
+  };
+
+  const getFallbackVisibleAreas = () => [{
+    x: 0,
+    y: 0,
+    width: window.innerWidth,
+    height: window.innerHeight
+  }];
+
+  const refreshVisibleAreas = async () => {
+    if (!electron?.getDisplayBounds) {
+      visibleAreas = getFallbackVisibleAreas();
+      return;
+    }
+
+    try {
+      const areas = await electron.getDisplayBounds();
+      visibleAreas = areas?.length ? areas : getFallbackVisibleAreas();
+    } catch {
+      visibleAreas = getFallbackVisibleAreas();
+    }
+  };
+
+  const clampToArea = (box, area) => ({
+    x: Math.max(area.x, Math.min(area.x + area.width - box.width, box.x)),
+    y: Math.max(area.y, Math.min(area.y + area.height - box.height, box.y)),
+    width: box.width,
+    height: box.height
+  });
+
+  const getVirtualArea = (areas) => {
+    const left = Math.min(...areas.map((area) => area.x));
+    const top = Math.min(...areas.map((area) => area.y));
+    const right = Math.max(...areas.map((area) => area.x + area.width));
+    const bottom = Math.max(...areas.map((area) => area.y + area.height));
+
+    return {
+      x: left,
+      y: top,
+      width: right - left,
+      height: bottom - top
+    };
+  };
+
+  const getIntersectionArea = (box, area) => {
+    const left = Math.max(box.x, area.x);
+    const top = Math.max(box.y, area.y);
+    const right = Math.min(box.x + box.width, area.x + area.width);
+    const bottom = Math.min(box.y + box.height, area.y + area.height);
+
+    return Math.max(0, right - left) * Math.max(0, bottom - top);
+  };
+
+  const getDistanceSquared = (left, right) => {
+    const deltaX = left.x - right.x;
+    const deltaY = left.y - right.y;
+    return deltaX * deltaX + deltaY * deltaY;
+  };
+
+  const clampToVisibleArea = (box) => {
+    const areas = visibleAreas.length ? visibleAreas : getFallbackVisibleAreas();
+    const intersectingAreas = areas.filter((area) => getIntersectionArea(box, area) > 0);
+
+    if (intersectingAreas.length > 1) {
+      return clampToArea(box, getVirtualArea(intersectingAreas));
+    }
+
+    const center = {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2
+    };
+    const containingArea = areas.find((area) => (
+      center.x >= area.x &&
+      center.x <= area.x + area.width &&
+      center.y >= area.y &&
+      center.y <= area.y + area.height
+    ));
+
+    if (containingArea) {
+      return clampToArea(box, containingArea);
+    }
+
+    const nearestArea = areas
+      .map((area) => {
+        const clamped = clampToArea(box, area);
+        return {
+          area,
+          distance: getDistanceSquared(center, {
+            x: clamped.x + clamped.width / 2,
+            y: clamped.y + clamped.height / 2
+          })
+        };
+      })
+      .sort((left, right) => left.distance - right.distance)[0].area;
+
+    return clampToArea(box, nearestArea);
   };
 
   const translateInput = () => {
@@ -109,8 +214,117 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!escapeQuestActive || !escapeSprite || !exitButton) return;
 
     if (rectanglesOverlap(escapeSprite.getBoundingClientRect(), exitButton.getBoundingClientRect())) {
-      closeWindow();
+      showLocaleWarningThenClose();
     }
+  };
+
+  const playWarningBeep = () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    warningAudioContext ??= new AudioContextClass();
+    warningAudioContext.resume().catch(() => {});
+
+    const start = warningAudioContext.currentTime;
+    const oscillator = warningAudioContext.createOscillator();
+    const gain = warningAudioContext.createGain();
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(880, start);
+    oscillator.frequency.setValueAtTime(660, start + 0.12);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+    gain.gain.setValueAtTime(0.18, start + 0.16);
+    gain.gain.linearRampToValueAtTime(0, start + 0.22);
+
+    oscillator.connect(gain);
+    gain.connect(warningAudioContext.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.24);
+  };
+
+  const startWarningNoise = () => {
+    playWarningBeep();
+    warningNoiseTimer = window.setInterval(playWarningBeep, 620);
+    window.setTimeout(() => {
+      window.clearInterval(warningNoiseTimer);
+      warningNoiseTimer = null;
+    }, LOCALE_WARNING_DURATION - 250);
+  };
+
+  const captureExitButtonPosition = () => {
+    if (!exitButton) return;
+
+    const bounds = exitButton.getBoundingClientRect();
+    exitButtonPosition = {
+      x: bounds.left,
+      y: bounds.top,
+      width: bounds.width,
+      height: bounds.height
+    };
+    exitButtonPosition = clampToVisibleArea(exitButtonPosition);
+    exitButton.classList.add('escaping');
+    exitButton.style.left = `${Math.round(exitButtonPosition.x)}px`;
+    exitButton.style.top = `${Math.round(exitButtonPosition.y)}px`;
+  };
+
+  const updateExitButtonPosition = () => {
+    if (!exitButton || !exitButtonPosition) return;
+
+    exitButton.style.left = `${Math.round(exitButtonPosition.x)}px`;
+    exitButton.style.top = `${Math.round(exitButtonPosition.y)}px`;
+  };
+
+  const moveExitButtonAwayFromSprite = (elapsedSeconds) => {
+    if (!escapeQuestActive || !escapeSprite || !exitButton || !exitButtonPosition) return;
+
+    const spriteCenter = {
+      x: spritePosition.x + SPRITE_WIDTH / 2,
+      y: spritePosition.y + SPRITE_HEIGHT / 2
+    };
+    const exitCenter = {
+      x: exitButtonPosition.x + exitButtonPosition.width / 2,
+      y: exitButtonPosition.y + exitButtonPosition.height / 2
+    };
+    const deltaX = exitCenter.x - spriteCenter.x;
+    const deltaY = exitCenter.y - spriteCenter.y;
+    const distance = Math.hypot(deltaX, deltaY);
+
+    if (distance > EXIT_BUTTON_FLEE_DISTANCE || distance < 1) {
+      exitButton.classList.remove('panicking');
+      return;
+    }
+
+    exitButton.classList.add('panicking');
+    const fleeStrength = 1 - distance / EXIT_BUTTON_FLEE_DISTANCE;
+    const moveDistance = EXIT_BUTTON_SPEED * (0.35 + fleeStrength) * elapsedSeconds;
+    exitButtonPosition = clampToVisibleArea({
+      ...exitButtonPosition,
+      x: exitButtonPosition.x + (deltaX / distance) * moveDistance,
+      y: exitButtonPosition.y + (deltaY / distance) * moveDistance
+    });
+    updateExitButtonPosition();
+  };
+
+  const showLocaleWarningThenClose = () => {
+    if (localeWarningActive) return;
+
+    localeWarningActive = true;
+    escapeQuestActive = false;
+    movementKeys.clear();
+    stopMovementLoop();
+    if (exitButton) {
+      exitButton.classList.add('frozen');
+    }
+
+    if (localeWarning) {
+      localeWarning.classList.remove('hidden');
+    }
+    startWarningNoise();
+
+    window.setTimeout(() => {
+      closeWindow();
+    }, LOCALE_WARNING_DURATION);
   };
 
   const increaseMusicVolume = () => {
@@ -120,12 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
     backgroundMusic.play().catch(() => {});
   };
 
-  const startEscapeQuest = () => {
-    if (!escapeSprite) return;
+  const startEscapeQuest = async () => {
+    if (!escapeSprite || localeWarningActive) return;
 
+    await refreshVisibleAreas();
     escapeQuestActive = true;
     movementKeys.clear();
     stopMovementLoop();
+    captureExitButtonPosition();
     facingDirection = 'down';
     walkAnimationStartedAt = 0;
     wasMoving = false;
@@ -172,6 +388,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const elapsedSeconds = Math.min((timestamp - lastMoveTime) / 1000, 0.05);
     lastMoveTime = timestamp;
+    checkForExitReached();
+    moveExitButtonAwayFromSprite(elapsedSeconds);
 
     const activeDirections = getHeldDirections();
     const primaryDirection = activeDirections[activeDirections.length - 1];
@@ -229,6 +447,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  refreshVisibleAreas();
+  window.addEventListener('resize', refreshVisibleAreas);
+
   if (exitButton) {
     exitButton.addEventListener('click', increaseMusicVolume);
   }
@@ -262,6 +483,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.addEventListener('keydown', (event) => {
+    if (localeWarningActive) {
+      event.preventDefault();
+      return;
+    }
+
     if (!escapeQuestActive) return;
 
     const key = event.key.toLowerCase();
