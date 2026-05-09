@@ -7,15 +7,39 @@ document.addEventListener('DOMContentLoaded', () => {
   const backgroundMusic = document.getElementById('backgroundMusic');
   const escapeSprite = document.getElementById('escapeSprite');
 
-  const SPRITE_WIDTH = 48;
-  const SPRITE_HEIGHT = 72;
+  const SPRITE_WIDTH = 72;
+  const SPRITE_HEIGHT = 75;
   const SPRITE_SPEED = 260;
+  const WALK_FRAME_DURATION = 180;
+  const MUSIC_INITIAL_VOLUME = 0.35;
+  const MUSIC_VOLUME_STEP = 0.08;
+  const MUSIC_MAX_VOLUME = 1;
   const ESCAPE_START_X = 24;
   const ESCAPE_START_Y = 120;
+  const KEY_DIRECTIONS = {
+    arrowdown: 'down',
+    arrowleft: 'left',
+    arrowright: 'right',
+    arrowup: 'up',
+    s: 'down',
+    a: 'left',
+    d: 'right',
+    w: 'up'
+  };
+  const DIRECTIONS = {
+    down: { x: 0, y: 1, idleFrame: 0, walkFrames: [1, 2] },
+    up: { x: 0, y: -1, idleFrame: 3, walkFrames: [4, 5] },
+    right: { x: 1, y: 0, idleFrame: 6, walkFrames: [7, 8] },
+    left: { x: -1, y: 0, idleFrame: 9, walkFrames: [10, 11] }
+  };
+  const DIRECTION_PRIORITY = ['down', 'up', 'right', 'left'];
   const movementKeys = new Set();
   let escapeQuestActive = false;
   let animationFrameId = null;
   let lastMoveTime = 0;
+  let facingDirection = 'down';
+  let walkAnimationStartedAt = 0;
+  let wasMoving = false;
   let spritePosition = {
     x: ESCAPE_START_X,
     y: ESCAPE_START_Y
@@ -56,7 +80,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const updateSpritePosition = () => {
     if (!escapeSprite) return;
 
-    escapeSprite.style.transform = `translate(${spritePosition.x}px, ${spritePosition.y}px)`;
+    escapeSprite.style.transform = `translate(${Math.round(spritePosition.x)}px, ${Math.round(spritePosition.y)}px)`;
+  };
+
+  const setSpriteFrame = (frameIndex) => {
+    if (!escapeSprite) return;
+
+    escapeSprite.style.backgroundPosition = `-${frameIndex * SPRITE_WIDTH}px 0`;
+  };
+
+  const getHeldDirections = () => {
+    const heldDirections = new Set();
+    for (const key of movementKeys) {
+      heldDirections.add(KEY_DIRECTIONS[key]);
+    }
+
+    return DIRECTION_PRIORITY.filter((direction) => heldDirections.has(direction));
   };
 
   const rectanglesOverlap = (first, second) => (
@@ -74,18 +113,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const increaseMusicVolume = () => {
+    if (!backgroundMusic) return;
+
+    backgroundMusic.volume = Math.min(MUSIC_MAX_VOLUME, backgroundMusic.volume + MUSIC_VOLUME_STEP);
+    backgroundMusic.play().catch(() => {});
+  };
+
   const startEscapeQuest = () => {
     if (!escapeSprite) return;
 
     escapeQuestActive = true;
     movementKeys.clear();
     stopMovementLoop();
+    facingDirection = 'down';
+    walkAnimationStartedAt = 0;
+    wasMoving = false;
     spritePosition = {
       x: ESCAPE_START_X,
       y: ESCAPE_START_Y
     };
     escapeSprite.classList.remove('hidden');
     updateSpritePosition();
+    setSpriteFrame(DIRECTIONS[facingDirection].idleFrame);
     inputText.blur();
   };
 
@@ -123,19 +173,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const elapsedSeconds = Math.min((timestamp - lastMoveTime) / 1000, 0.05);
     lastMoveTime = timestamp;
 
+    const activeDirections = getHeldDirections();
+    const primaryDirection = activeDirections[activeDirections.length - 1];
+    if (primaryDirection && !wasMoving) {
+      walkAnimationStartedAt = timestamp;
+    }
+    if (primaryDirection && primaryDirection !== facingDirection) {
+      facingDirection = primaryDirection;
+      walkAnimationStartedAt = timestamp;
+    }
+
     let deltaX = 0;
     let deltaY = 0;
-    if (movementKeys.has('w')) deltaY -= 1;
-    if (movementKeys.has('a')) deltaX -= 1;
-    if (movementKeys.has('s')) deltaY += 1;
-    if (movementKeys.has('d')) deltaX += 1;
+    for (const direction of activeDirections) {
+      deltaX += DIRECTIONS[direction].x;
+      deltaY += DIRECTIONS[direction].y;
+    }
 
     if (deltaX || deltaY) {
       const length = Math.hypot(deltaX, deltaY);
+      const frames = DIRECTIONS[facingDirection].walkFrames;
+      const frameOffset = Math.floor((timestamp - walkAnimationStartedAt) / WALK_FRAME_DURATION) % frames.length;
+      setSpriteFrame(frames[frameOffset]);
       moveSprite(
         (deltaX / length) * SPRITE_SPEED * elapsedSeconds,
         (deltaY / length) * SPRITE_SPEED * elapsedSeconds
       );
+      wasMoving = true;
+    } else {
+      setSpriteFrame(DIRECTIONS[facingDirection].idleFrame);
+      wasMoving = false;
     }
 
     animationFrameId = window.requestAnimationFrame(moveSpriteWithKeys);
@@ -149,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   if (backgroundMusic) {
-    backgroundMusic.volume = 0.35;
+    backgroundMusic.volume = MUSIC_INITIAL_VOLUME;
     backgroundMusic.play().catch(() => {
       const startMusic = () => {
         backgroundMusic.play().catch(() => {});
@@ -160,6 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('pointerdown', startMusic);
       document.addEventListener('keydown', startMusic);
     });
+  }
+
+  if (exitButton) {
+    exitButton.addEventListener('click', increaseMusicVolume);
   }
 
   const secretExit = document.getElementById('secretExit');
@@ -194,7 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!escapeQuestActive) return;
 
     const key = event.key.toLowerCase();
-    if (!['w', 'a', 's', 'd'].includes(key)) return;
+    const direction = KEY_DIRECTIONS[key];
+    if (!direction) return;
 
     event.preventDefault();
     movementKeys.add(key);
@@ -203,8 +275,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keyup', (event) => {
     const key = event.key.toLowerCase();
-    if (!['w', 'a', 's', 'd'].includes(key)) return;
+    const direction = KEY_DIRECTIONS[key];
+    if (!direction) return;
 
     movementKeys.delete(key);
+    if (!movementKeys.size) {
+      wasMoving = false;
+      setSpriteFrame(DIRECTIONS[direction].idleFrame);
+    }
   });
 });

@@ -4,10 +4,24 @@ const zlib = require('zlib');
 const inputPath = process.argv[2] ?? '8142.png';
 const outputPath = process.argv[3] ?? 'src/escape-sprite.png';
 
-const SPRITE_X = 7;
-const SPRITE_Y = 67;
-const SPRITE_WIDTH = 16;
-const SPRITE_HEIGHT = 24;
+const SPRITE_BOUNDS = [
+  { left: 7, right: 21 },
+  { left: 24, right: 39 },
+  { left: 43, right: 57 },
+  { left: 60, right: 74 },
+  { left: 76, right: 90 },
+  { left: 92, right: 106 },
+  { left: 109, right: 131 },
+  { left: 134, right: 156 },
+  { left: 159, right: 181 },
+  { left: 184, right: 206 },
+  { left: 209, right: 231 },
+  { left: 234, right: 256 }
+];
+const SPRITE_Y = 66;
+const SPRITE_WIDTH = 24;
+const SPRITE_HEIGHT = 25;
+const SPRITE_COUNT = SPRITE_BOUNDS.length;
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -145,23 +159,30 @@ const createPng = (width, height, rgba) => {
 const source = parsePng(fs.readFileSync(inputPath));
 const pixels = unfilterRgb(source);
 const background = pixels.subarray(0, 3);
-const output = Buffer.alloc(SPRITE_WIDTH * SPRITE_HEIGHT * 4);
+const outputWidth = SPRITE_WIDTH * SPRITE_COUNT;
+const output = Buffer.alloc(outputWidth * SPRITE_HEIGHT * 4);
 
 for (let y = 0; y < SPRITE_HEIGHT; y += 1) {
-  for (let x = 0; x < SPRITE_WIDTH; x += 1) {
-    const sourceOffset = ((SPRITE_Y + y) * source.width + SPRITE_X + x) * 3;
-    const targetOffset = (y * SPRITE_WIDTH + x) * 4;
-    const red = pixels[sourceOffset];
-    const green = pixels[sourceOffset + 1];
-    const blue = pixels[sourceOffset + 2];
-    const isBackground = red === background[0] && green === background[1] && blue === background[2];
+  for (let frame = 0; frame < SPRITE_COUNT; frame += 1) {
+    const bounds = SPRITE_BOUNDS[frame];
+    const sourceWidth = bounds.right - bounds.left + 1;
+    const targetX = Math.floor((SPRITE_WIDTH - sourceWidth) / 2);
 
-    output[targetOffset] = red;
-    output[targetOffset + 1] = green;
-    output[targetOffset + 2] = blue;
-    output[targetOffset + 3] = isBackground ? 0 : 255;
+    for (let x = 0; x < sourceWidth; x += 1) {
+      const sourceOffset = ((SPRITE_Y + y) * source.width + bounds.left + x) * 3;
+      const targetOffset = (y * outputWidth + frame * SPRITE_WIDTH + targetX + x) * 4;
+      const red = pixels[sourceOffset];
+      const green = pixels[sourceOffset + 1];
+      const blue = pixels[sourceOffset + 2];
+      const isBackground = red === background[0] && green === background[1] && blue === background[2];
+
+      output[targetOffset] = red;
+      output[targetOffset + 1] = green;
+      output[targetOffset + 2] = blue;
+      output[targetOffset + 3] = isBackground ? 0 : 255;
+    }
   }
 }
 
-fs.writeFileSync(outputPath, createPng(SPRITE_WIDTH, SPRITE_HEIGHT, output));
-console.log(`Extracted ${SPRITE_WIDTH}x${SPRITE_HEIGHT} sprite to ${outputPath}`);
+fs.writeFileSync(outputPath, createPng(outputWidth, SPRITE_HEIGHT, output));
+console.log(`Extracted ${SPRITE_COUNT} ${SPRITE_WIDTH}x${SPRITE_HEIGHT} sprites to ${outputPath}`);

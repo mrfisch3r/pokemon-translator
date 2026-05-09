@@ -111,13 +111,13 @@ form {
   color: #ffffff;
   font-weight: 700;
   border-radius: 999px;
-  cursor: default;
-  pointer-events: none;
+  cursor: pointer;
   transition: transform 120ms ease, background 120ms ease;
 }
 
 .exit-button:hover {
-  background: #ff4d68;
+  transform: translateY(-1px);
+  background: #d11e2f;
 }
 
 label {
@@ -216,14 +216,15 @@ button:hover {
   position: fixed;
   top: 0;
   left: 0;
-  width: 48px;
-  height: 72px;
+  width: 72px;
+  height: 75px;
   z-index: 70;
   pointer-events: none;
   image-rendering: pixelated;
   background-image: url('./escape-sprite.png');
   background-repeat: no-repeat;
-  background-size: 48px 72px;
+  background-position: 0 0;
+  background-size: 864px 75px;
   filter: drop-shadow(0 10px 0 rgba(15, 23, 42, 0.18));
 }
 
