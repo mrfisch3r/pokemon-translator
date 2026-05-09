@@ -3,25 +3,16 @@ import { translateToPokemonRhyme } from './translator.js';
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('translateForm');
   const inputText = document.getElementById('inputText');
-  const message = document.getElementById('message');
   const result = document.getElementById('result');
 
   const translateInput = () => {
     const text = inputText.value.trim();
     if (!text) {
-      message.textContent = 'Enter some text to translate.';
       result.textContent = '';
       return;
     }
 
-    const translated = translateToPokemonRhyme(text);
-    if (translated === text) {
-      message.textContent = 'No rhyme-based Pokemon translation was found for this phrase.';
-    } else {
-      message.textContent = 'Translated phrase created from Pokemon names that rhyme with your input.';
-    }
-
-    result.textContent = translated;
+    result.textContent = translateToPokemonRhyme(text);
   };
 
   form.addEventListener('submit', (event) => {
@@ -36,18 +27,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  const electron = window.electron || null;
+  const closeWindow = () => {
+    if (electron?.requestClose) {
+      electron.requestClose();
+    } else {
+      window.close();
+    }
+  };
+
   const exitButton = document.getElementById('exitButton');
   if (exitButton) {
-    exitButton.addEventListener('click', () => {
-      window.electron.requestClose();
-    });
+    exitButton.addEventListener('click', closeWindow);
   }
 
   const secretExit = document.getElementById('secretExit');
   if (secretExit) {
-    secretExit.addEventListener('click', () => {
-      window.electron.requestClose();
-    });
+    secretExit.addEventListener('click', closeWindow);
   }
 
   const altF4Overlay = document.getElementById('altF4Overlay');
@@ -65,9 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  window.electron.onAppCloseAttempt(() => {
-    showAltF4Overlay();
-  });
+  if (electron?.onAppCloseAttempt) {
+    electron.onAppCloseAttempt(() => {
+      showAltF4Overlay();
+    });
+  }
 
   if (overlayClose) {
     overlayClose.addEventListener('click', hideAltF4Overlay);
