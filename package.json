@@ -7,6 +7,7 @@
   "scripts": {
     "start": "electron .",
     "render-audio": "node scripts/render-midi-to-wav.js src/riding-the-bike.mid src/riding-the-bike.wav",
+    "extract-sprite": "node scripts/extract-escape-sprite.js 8142.png src/escape-sprite.png",
     "dist:portable": "electron-builder --win portable -c.win.signAndEditExecutable=false",
     "dist": "electron-builder --win",
     "package": "npm run dist"
