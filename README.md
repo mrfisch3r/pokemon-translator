@@ -3,10 +3,11 @@
 A simple Windows desktop app built with Electron that converts entered text into a phrase composed of Pokemon names that rhyme with the original words.
 
 ## Features
-- Enter any text phrase
-- Translate each word into a Pokemon name with a matching rhyme pattern
-- Works offline with built-in Pokemon name data
-- Packaged for Windows as an `.exe`
+- Convert phrases into Pokemon-name rhyme phrases
+- Phrase-level and word-level rhyme matching
+- Keeps original words when no strong rhyme exists
+- Offline by default using built-in Pokemon datasets
+- Windows packaging via `electron-builder`
 
 ## Run locally
 1. Install dependencies:
@@ -17,20 +18,23 @@ A simple Windows desktop app built with Electron that converts entered text into
    ```bash
    npm start
    ```
+3. In the app, enter text and press `Shift + Enter` or click `Translate`.
 
 ## Build for Windows
+To produce a Windows installer `.exe`:
+
 ```bash
 npm run dist
 ```
 
+The output will appear in the `dist/` folder.
+
 ## GitHub
-This repository is ready to be initialized and pushed to GitHub. Create a new GitHub repository, then run:
+This repository is already connected to GitHub and pushed to `origin/main`.
+
+If you want to reinitialize locally or connect to another repo:
 
 ```bash
-git init
-git add .
-git commit -m "Initial commit: Electron Pokemon Translator"
-git branch -M main
 git remote add origin <your-github-repo-url>
 git push -u origin main
 ```
