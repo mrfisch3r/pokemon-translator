@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('translateForm');
   const inputText = document.getElementById('inputText');
   const result = document.getElementById('result');
+  const backgroundMusic = document.getElementById('backgroundMusic');
 
   const translateInput = () => {
     const text = inputText.value.trim();
@@ -39,6 +40,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const exitButton = document.getElementById('exitButton');
   if (exitButton) {
     exitButton.addEventListener('click', closeWindow);
+  }
+
+  if (backgroundMusic) {
+    backgroundMusic.volume = 0.35;
+    backgroundMusic.play().catch(() => {
+      const startMusic = () => {
+        backgroundMusic.play().catch(() => {});
+        document.removeEventListener('pointerdown', startMusic);
+        document.removeEventListener('keydown', startMusic);
+      };
+
+      document.addEventListener('pointerdown', startMusic);
+      document.addEventListener('keydown', startMusic);
+    });
   }
 
   const secretExit = document.getElementById('secretExit');
